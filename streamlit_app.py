@@ -64,14 +64,21 @@ st.markdown(PAGE_CSS, unsafe_allow_html=True)
 # -------------------------
 # Utilities
 # -------------------------
-def clean_text(s: str):
+import re
+
+def clean_text_keep_tokens(s: str):
     if not isinstance(s, str):
         s = str(s)
     s = s.lower()
-    s = re.sub(r"http\S+", " ", s)
-    s = re.sub(r"[^a-z0-9\s]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
+    # replace URLs with a clear token
+    s = re.sub(r'(https?://\S+|www\.\S+)', ' __URL__ ', s)
+    # replace phone-like long numbers with a clear token (6+ digits)
+    s = re.sub(r'\b\d{6,}\b', ' __PHONE__ ', s)
+    # remove other punctuation but keep underscores from tokens
+    s = re.sub(r'[^a-z0-9_\s]', ' ', s)
+    s = re.sub(r'\s+', ' ', s).strip()
     return s
+
 
 def load_model(path="model.joblib"):
     p = Path(path)
