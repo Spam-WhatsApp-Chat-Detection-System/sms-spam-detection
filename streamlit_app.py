@@ -5,6 +5,8 @@ import re
 import numpy as np
 import time
 from pathlib import Path
+import pandas as pd
+import base64
 
 # -------------------------
 # Styling (custom CSS)
@@ -95,9 +97,11 @@ textarea[aria-label="Message"] {
 """
 
 # -------------------------
-# Utilities
+# Utilities (cleaners + model loader)
 # -------------------------
+
 def clean_text(s: str):
+    """Original simpler cleaner (kept for reference)."""
     if not isinstance(s, str):
         s = str(s)
     s = s.lower()
@@ -106,13 +110,50 @@ def clean_text(s: str):
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
-def load_model(path="model.joblib"):
-    p = Path(path)
-    if not p.exists():
-        raise FileNotFoundError(f"model file not found at: {p.resolve()}")
-    return joblib.load(p)
+def clean_text_keep_tokens(s: str):
+    """Token-preserving cleaner: replace URLs and long numbers with tokens.
+    This matches the preprocessing used for the tokenized model.
+    """
+    if not isinstance(s, str):
+        s = str(s)
+    s = s.lower()
+    # replace URLs with a clear token
+    s = re.sub(r'(https?://\S+|www\.\S+)', ' __URL__ ', s)
+    # replace phone-like long numbers (6+ digits) with a token
+    s = re.sub(r'\b\d{6,}\b', ' __PHONE__ ', s)
+    # remove other punctuation but keep underscores from tokens
+    s = re.sub(r'[^a-z0-9_\s]', ' ', s)
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
 
-# Pre-made sample messages (mix of spam & ham)
+def load_model(path=None):
+    """Load model. If path is provided, try it; otherwise try model_tokenized.joblib then model.joblib."""
+    # if explicit path given
+    if path:
+        p = Path(path)
+        if p.exists():
+            return joblib.load(p)
+        else:
+            raise FileNotFoundError(f"model file not found at: {p.resolve()}")
+
+    # try tokenized model first (preferred)
+    p1 = Path("model_tokenized.joblib")
+    p2 = Path("model.joblib")
+    if p1.exists():
+        return joblib.load(p1)
+    if p2.exists():
+        return joblib.load(p2)
+    raise FileNotFoundError(f"model file not found (tried: {p1.resolve()}, {p2.resolve()})")
+
+def download_link(df: pd.DataFrame, filename: str):
+    csv = df.to_csv(index=False)
+    b64 = base64.b64encode(csv.encode()).decode()
+    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">⬇️ Download CSV</a>'
+    return href
+
+# -------------------------
+# Samples
+# -------------------------
 SAMPLES = [
     ("Congratulations! You have won a FREE iPhone. Click here to claim: http://bit.ly/win-phone", "Spam"),
     ("Your parcel delivery failed. Track here: http://track-now.example", "Spam"),
@@ -168,22 +209,64 @@ with left:
         st.markdown("- Tip: paste messages containing links or phone numbers to test edge cases.")
         st.markdown("- If your model was trained with different preprocessing, results may vary.")
 
+        # allow user to upload a model; also a debug toggle
+        uploaded_model = st.file_uploader("Upload a scikit-learn pipeline (.joblib)", type=["joblib", "pkl"])
+        if uploaded_model is not None:
+            tmp_path = Path("uploaded_model.joblib")
+            tmp_path.write_bytes(uploaded_model.read())
+            st.session_state["model_path"] = str(tmp_path.resolve())
+            st.success("Uploaded model will be used for predictions.")
+
+        debug_enabled = st.checkbox("Enable debug output (show model & cleaned text)", value=False)
+        st.session_state["debug_enabled"] = bool(debug_enabled)
+
     # Predict & show result
     if st.session_state.get("_do_predict", False):
         # run prediction with spinner
         with st.spinner("Analyzing message..."):
             time.sleep(0.6)  # minor delay for UX polish
             try:
-                model = load_model("model.joblib")
-                cleaned = clean_text(msg)
-                # if the pipeline expects raw text, pass cleaned; if it expects arrays it should still work
+                # prefer model_path set by uploaded model, else try default loader
+                model_path = st.session_state.get("model_path", None)
+                if model_path:
+                    model = load_model(model_path)
+                    model_path_in_use = model_path
+                else:
+                    model = load_model()  # will attempt tokenized then model.joblib
+                    # find which file we used
+                    if Path("model_tokenized.joblib").exists():
+                        model_path_in_use = "model_tokenized.joblib"
+                    else:
+                        model_path_in_use = "model.joblib"
+
+                # use token-preserving cleaner (keeps __URL__ & __PHONE__)
+                cleaned = clean_text_keep_tokens(msg)
+
+                # If debug mode is on, show debugging info first
+                if st.session_state.get("debug_enabled", False):
+                    st.write("DEBUG: model_path_in_use =", model_path_in_use)
+                    st.write("DEBUG: model.classes_:", getattr(model, "classes_", None))
+                    steps = getattr(model, "named_steps", None)
+                    st.write("DEBUG: pipeline steps:", list(steps.keys()) if steps else None)
+                    try:
+                        if steps and "tfidf" in steps:
+                            st.write("DEBUG: TF-IDF vocab size:", len(steps["tfidf"].vocabulary_))
+                    except Exception as e:
+                        st.write("DEBUG: TF-IDF read error:", e)
+                    st.write("DEBUG: cleaned text:", cleaned)
+
+                # if pipeline expects raw text then passing cleaned may be okay; we trained tokenized model so use cleaned
                 pred = model.predict([cleaned])[0]
                 prob = None
                 if hasattr(model, "predict_proba"):
                     try:
                         probv = model.predict_proba([cleaned])[0]
                         prob = float(np.max(probv))
-                    except Exception:
+                        if st.session_state.get("debug_enabled", False):
+                            st.write("DEBUG: model.predict_proba(cleaned):", probv)
+                    except Exception as e:
+                        if st.session_state.get("debug_enabled", False):
+                            st.write("DEBUG: predict_proba error:", e)
                         prob = None
 
                 # show result banner
@@ -223,7 +306,7 @@ with right:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("### Project Info")
     st.markdown("- Model: TF-IDF + MultinomialNB")
-    st.markdown("- Presented by:  **Abhishek Basu, Ananya Raj, Sneha Das, Payel Guin, Subhajit Khamrai**")
+    st.markdown("- Presented by:  **Abhishek Basu, Ananya Raj, Sneha Das, Payel Guin, Subhajit Khamkai**")
     st.markdown("- Repo: `sms-spam-detection`")
     st.markdown("- Purpose: Final year project")
     st.markdown("<br>", unsafe_allow_html=True)
