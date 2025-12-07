@@ -155,7 +155,8 @@ textarea[aria-label="Message"] {
 }
 """
 
-st.markdown(CSS, unsafe_allow_html=True)
+st.markdown(f"<style>{CSS}</style>", unsafe_allow_html=True)
+
 
 # ---------------------------
 # Utilities
