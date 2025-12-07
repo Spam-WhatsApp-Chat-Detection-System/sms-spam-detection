@@ -225,7 +225,7 @@ with right:
     st.markdown("- Model: TF-IDF + MultinomialNB")
     st.markdown("- Presented by:  **Abhishek Basu, Ananya Raj, Sneha Das, Payal Guin, Subhojit Khamrai**")
     st.markdown("- Repo: `sms-spam-detection`")
-    st.markdown("- Purpose: Final year project demo / viva")
+    st.markdown("- Purpose: Final year project")
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Show simple metrics (placeholders — replace with real values if you want)
