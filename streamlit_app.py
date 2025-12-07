@@ -1,248 +1,300 @@
 # streamlit_app.py
+# Glassmorphism theme — Paste this file into your repo root alongside model.joblib
 import streamlit as st
 import joblib
 import re
-import numpy as np
 import time
+import numpy as np
 from pathlib import Path
 
-# -------------------------
-# Styling (custom CSS)
-# -------------------------
-PAGE_CSS = """
-<style>
+# ---------------------------
+# Page config + CSS
+# ---------------------------
+st.set_page_config(
+    page_title="SMS / WhatsApp Spam Detector — Glass UI",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+CSS = r"""
+/* Google font */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
 
-html, body, [class*="css"]  {
-    font-family: "Inter", sans-serif;
-    color: #e6e6e6;
-    background: linear-gradient(180deg, #0f1115 0%, #0b0c0f 60%);
+:root{
+  --bg1: #0b0c0f;
+  --glass: rgba(255,255,255,0.06);
+  --glass-2: rgba(255,255,255,0.04);
+  --accent: rgba(255,133,97,0.95);
+  --muted: #bfc7c9;
+  --card-radius: 16px;
 }
 
-/* Header */
+/* Global */
+html, body, [class*="css"] {
+  background: linear-gradient(180deg,#070709 0%, #0b0c0f 60%);
+  font-family: "Inter", sans-serif;
+  color: #e9e9e9;
+}
+
+/* main container spacing */
+.block {
+  padding: 18px;
+}
+
+/* header */
 .header {
-    display:flex;
-    align-items:center;
-    gap:18px;
+  display:flex;
+  align-items:center;
+  gap:18px;
 }
-.brand-icon {
-    width:72px; height:72px;
-    border-radius:18px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    background: linear-gradient(135deg,#ff7a59,#ffb86b);
-    box-shadow: 0 8px 30px rgba(255,120,90,0.14);
-    font-size:34px;
+.logo {
+  width:84px; height:84px;
+  border-radius:20px;
+  display:flex; align-items:center; justify-content:center;
+  background: linear-gradient(135deg, rgba(255,160,130,0.18), rgba(255,110,85,0.12));
+  box-shadow: 0 10px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.02);
 }
-.title {
-    font-weight:800;
-    font-size:34px;
-    color: #fff;
-    margin:0;
-}
-.subtitle { color: #c7c7c7; margin-top:4px; }
+.logo-emoji { font-size:36px; transform:translateY(-2px) }
 
-/* Card */
+/* frosted glass card */
 .card {
-    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-    border-radius: 14px;
-    padding: 22px;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.6);
-    border: 1px solid rgba(255,255,255,0.03);
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+  backdrop-filter: blur(8px) saturate(1.1);
+  -webkit-backdrop-filter: blur(8px) saturate(1.1);
+  border-radius: var(--card-radius);
+  border: 1px solid rgba(255,255,255,0.04);
+  padding: 20px;
+  box-shadow: 0 8px 30px rgba(2,6,12,0.7);
 }
 
-/* Text area */
+/* textarea styling */
 textarea[aria-label="Message"] {
-    background: rgba(0,0,0,0.4) !important;
-    color: #f0f0f0 !important;
-    border-radius: 10px !important;
-    padding: 16px !important;
-    height: 160px !important;
-    border: 1px solid rgba(255,255,255,0.04) !important;
+  background: rgba(255,255,255,0.02) !important;
+  color: #efecec !important;
+  border-radius: 12px !important;
+  padding: 18px !important;
+  min-height: 160px !important;
+  border: 1px solid rgba(255,255,255,0.035) !important;
+  font-size: 15px !important;
 }
 
-/* Buttons */
+/* buttons */
 .stButton>button {
-    border-radius: 12px;
-    padding: 10px 18px;
-    font-weight:600;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+  border-radius: 12px;
+  padding: 10px 18px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  border: none;
 }
 
-/* Result banners */
+/* primary style */
+.btn-primary {
+  background: linear-gradient(90deg, rgba(255,133,97,0.95), rgba(255,93,120,0.95));
+  color: white !important;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+/* secondary */
+.btn-ghost {
+  background: rgba(255,255,255,0.02);
+  color: var(--muted) !important;
+  border: 1px solid rgba(255,255,255,0.03);
+}
+
+/* result banners */
 .result-success {
-    background: linear-gradient(90deg,#164e37,#0d3928);
-    padding:14px;border-radius:10px;color:#dff7e3;
+  background: linear-gradient(90deg, rgba(18,87,64,0.9), rgba(12,60,44,0.92));
+  padding: 14px; border-radius: 10px; color: #ddf6e8; font-weight:700;
+  box-shadow: 0 8px 30px rgba(6,40,30,0.45);
 }
 .result-danger {
-    background: linear-gradient(90deg,#611b1b,#3b0f0f);
-    padding:14px;border-radius:10px;color:#ffd6d6;
+  background: linear-gradient(90deg, rgba(120,20,20,0.95), rgba(80,10,10,0.93));
+  padding: 14px; border-radius: 10px; color: #ffe3e3; font-weight:700;
+  box-shadow: 0 8px 30px rgba(60,10,10,0.45);
 }
 
-/* small helper */
-.small-muted { color: #9aa0a6; font-size:13px; }
-
-/* examples table */
-.example-row {
-    padding:8px 12px; border-radius:8px;
-    background: rgba(255,255,255,0.01);
-    margin-bottom:8px;
-    border: 1px solid rgba(255,255,255,0.02);
+/* confidence bar container */
+.conf-wrap {
+  margin-top:10px;
+  background: rgba(255,255,255,0.015);
+  border-radius: 8px;
+  padding:8px;
+  border: 1px solid rgba(255,255,255,0.02);
 }
 
-</style>
+/* examples */
+.example {
+  padding:10px; border-radius:8px; margin-bottom:8px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+  border: 1px solid rgba(255,255,255,0.02);
+  color:#dfe8ea;
+}
+
+/* titles */
+.h1 {
+  font-size:36px; font-weight:800; margin:0;
+}
+.h2 { font-size:20px; font-weight:700; color:#dfe8ea; }
+
+/* small muted */
+.small { color: #aeb7b9; font-size:13px; }
+
+/* subtle animated glow around main card */
+@keyframes floatglow {
+  0% { box-shadow: 0 6px 30px rgba(0,0,0,0.6); transform: translateY(0px); }
+  50% { box-shadow: 0 18px 60px rgba(0,0,0,0.65); transform: translateY(-6px); }
+  100% { box-shadow: 0 6px 30px rgba(0,0,0,0.6); transform: translateY(0px); }
+}
+.card-animated { animation: floatglow 6s ease-in-out infinite; }
+
+/* responsive tweaks */
+@media (max-width:900px) {
+  .h1 { font-size:26px; }
+  .logo { width:64px; height:64px; }
+}
 """
 
-# -------------------------
+st.markdown(CSS, unsafe_allow_html=True)
+
+# ---------------------------
 # Utilities
-# -------------------------
-def clean_text(s: str):
-    if not isinstance(s, str):
-        s = str(s)
-    s = s.lower()
-    s = re.sub(r"http\S+", " ", s)
-    s = re.sub(r"[^a-z0-9\s]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
+# ---------------------------
+def clean_text(txt: str) -> str:
+    if not isinstance(txt, str):
+        txt = str(txt)
+    txt = txt.lower()
+    txt = re.sub(r"http\S+", " ", txt)
+    txt = re.sub(r"[^a-z0-9\s]", " ", txt)
+    txt = re.sub(r"\s+", " ", txt).strip()
+    return txt
 
-def load_model(path="model.joblib"):
-    p = Path(path)
-    if not p.exists():
-        raise FileNotFoundError(f"model file not found at: {p.resolve()}")
-    return joblib.load(p)
+def load_model(p="model.joblib"):
+    path = Path(p)
+    if not path.exists():
+        raise FileNotFoundError(f"Model file not found at {path.resolve()}")
+    return joblib.load(path)
 
-# Pre-made sample messages (mix of spam & ham)
-SAMPLES = [
-    ("Congratulations! You have won a FREE iPhone. Click here to claim: http://bit.ly/win-phone", "Spam"),
-    ("Your parcel delivery failed. Track here: http://track-now.example", "Spam"),
-    ("Are you coming to class today?", "Ham"),
-    ("Don't forget the meeting at 3pm. See you there.", "Ham"),
-    ("Urgent: Your account will be suspended. Call 1800-999-000", "Spam"),
-    ("Happy birthday! Hope you have a great day.", "Ham"),
-]
-
-# -------------------------
-# App layout
-# -------------------------
-st.set_page_config(page_title="SMS / WhatsApp Spam Detector", layout="wide", initial_sidebar_state="auto")
-st.markdown(PAGE_CSS, unsafe_allow_html=True)
-
-# Header
-col1, col2 = st.columns([0.12, 0.88])
-with col1:
-    st.markdown('<div class="brand-icon">✉️</div>', unsafe_allow_html=True)
-with col2:
-    st.markdown('<div class="header"><div><h1 class="title">SMS / WhatsApp Spam Detector</h1><div class="subtitle small-muted">Real-time spam classification — demo & presentation ready</div></div></div>', unsafe_allow_html=True)
+# ---------------------------
+# Layout: Header
+# ---------------------------
+left_col, right_col = st.columns([0.12, 0.88])
+with left_col:
+    st.markdown('<div class="logo"><div class="logo-emoji">✉️</div></div>', unsafe_allow_html=True)
+with right_col:
+    st.markdown('<div><div class="h1">SMS / WhatsApp Spam Detector</div><div class="small">Real-time classification — presentation-ready UI</div></div>', unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Main content columns
-left, right = st.columns([2, 1])
+# ---------------------------
+# Main two-column layout
+# ---------------------------
+main, sidebar = st.columns([2.2, 0.9])
 
-with left:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+with main:
+    st.markdown('<div class="card card-animated">', unsafe_allow_html=True)
+    st.markdown('<div class="h2">Enter a message and press Predict</div>', unsafe_allow_html=True)
+    st.markdown('<div class="small">Paste a message (with or without links), then click Predict.</div><br>', unsafe_allow_html=True)
 
-    st.markdown("#### Enter a message and press **Predict**", unsafe_allow_html=True)
-    msg = st.text_area("Message", value="Your appointment is confirmed for Monday at 4pm.", key="message")
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+    # Message input
+    msg = st.text_area("Message", value="Your appointment is confirmed for Monday at 4pm.", key="msg_input")
 
-    c1, c2, c3 = st.columns([1,1,1])
-    with c1:
-        if st.button("Predict", key="predict"):
-            st.session_state._do_predict = True
-    with c2:
-        if st.button("Quick: Spam sample", key="samp_spam"):
-            st.session_state.message = SAMPLES[0][0]
-            msg = st.session_state.message
-    with c3:
-        if st.button("Quick: Ham sample", key="samp_ham"):
-            st.session_state.message = SAMPLES[2][0]
-            msg = st.session_state.message
+    # Buttons row
+    b1, b2, b3 = st.columns([1,1,1])
+    with b1:
+        if st.button("Predict", key="btn_predict"):
+            st.session_state._predict = True
+    with b2:
+        if st.button("Quick: Spam sample", key="btn_spam"):
+            st.session_state.msg_input = "Congratulations! You have won a FREE iPhone. Click here to claim: http://bit.ly/win-phone"
+            st.session_state._predict = True
+    with b3:
+        if st.button("Quick: Ham sample", key="btn_ham"):
+            st.session_state.msg_input = "See you at the library at 6pm. Bring the notes."
+            st.session_state._predict = True
 
-    st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
 
-    # Advanced options row
+    # Advanced expander
     with st.expander("Advanced options & diagnostics", expanded=False):
-        st.markdown("- Model: **scikit-learn Pipeline** (TF-IDF + MultinomialNB).")
-        st.markdown("- Tip: paste messages containing links or phone numbers to test edge cases.")
-        st.markdown("- If your model was trained with different preprocessing, results may vary.")
+        st.markdown("- Model: `TF-IDF` + `MultinomialNB` (scikit-learn pipeline).")
+        st.markdown("- The pipeline expects raw text; it includes TF-IDF inside the pipeline.")
+        st.markdown("- Use the Quick buttons for fast demo in your viva.")
 
-    # Predict & show result
-    if st.session_state.get("_do_predict", False):
-        # run prediction with spinner
-        with st.spinner("Analyzing message..."):
-            time.sleep(0.6)  # minor delay for UX polish
+    # Prediction area
+    if st.session_state.get("_predict", False):
+        with st.spinner("Analyzing..."):
+            time.sleep(0.5)
             try:
                 model = load_model("model.joblib")
-                cleaned = clean_text(msg)
-                # if the pipeline expects raw text, pass cleaned; if it expects arrays it should still work
+                current_msg = st.session_state.get("msg_input", msg)
+                cleaned = clean_text(current_msg)
                 pred = model.predict([cleaned])[0]
                 prob = None
                 if hasattr(model, "predict_proba"):
                     try:
-                        probv = model.predict_proba([cleaned])[0]
-                        prob = float(np.max(probv))
+                        prob = float(np.max(model.predict_proba([cleaned])[0]))
                     except Exception:
                         prob = None
 
-                # show result banner
                 if str(pred).lower() in ("spam", "1", "true"):
-                    st.markdown('<div class="result-danger"> <strong>🚨 This message is SPAM</strong></div>', unsafe_allow_html=True)
+                    st.markdown('<div class="result-danger">🚨 This message is <strong>SPAM</strong></div>', unsafe_allow_html=True)
                 else:
-                    st.markdown('<div class="result-success"> <strong>✅ This message is NOT spam</strong></div>', unsafe_allow_html=True)
+                    st.markdown('<div class="result-success">✅ This message is <strong>NOT spam</strong></div>', unsafe_allow_html=True)
 
-                # confidence bar
                 if prob is not None:
                     pct = int(round(prob*100))
-                    st.markdown(f"<div style='margin-top:12px'><div class='small-muted'>Confidence</div></div>", unsafe_allow_html=True)
+                    st.markdown(f'<div class="conf-wrap"><div class="small">Model confidence</div></div>', unsafe_allow_html=True)
                     st.progress(pct)
-                    st.write(f"Model confidence: **{pct}%**")
+                    st.write(f"**Confidence:** {pct}%")
                 else:
-                    st.write("Model confidence: **N/A**")
+                    st.write("**Confidence:** N/A")
 
             except FileNotFoundError as fe:
                 st.error(str(fe))
             except Exception as e:
-                st.error("Prediction failed: " + str(e))
-        # reset flag so Predict button can be used again
-        st.session_state._do_predict = False
+                st.error("Prediction error: " + str(e))
+        st.session_state._predict = False
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Examples / demo table
+    # Examples card
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### Example messages")
-    for text, label in SAMPLES:
-        label_badge = "🔴 SPAM" if label.lower()=="spam" else "🟢 HAM"
-        st.markdown(f'<div class="example-row"><strong>{label_badge}</strong> &nbsp; {text}</div>', unsafe_allow_html=True)
+    st.markdown("<div class='h2'>Example messages</div>", unsafe_allow_html=True)
+    examples = [
+        ("Congratulations! You have won a FREE iPhone. Click here to claim: http://bit.ly/win-phone", "Spam"),
+        ("Your parcel delivery failed. Track here: http://track.example", "Spam"),
+        ("Are you coming to class today?", "Ham"),
+        ("Don't forget the meeting at 3pm.", "Ham"),
+    ]
+    for txt, lbl in examples:
+        badge = "🔴 SPAM" if lbl=="Spam" else "🟢 HAM"
+        st.markdown(f'<div class="example"><strong>{badge}</strong> &nbsp; {txt}</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-with right:
+with sidebar:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### Project Info")
-    st.markdown("- Model: TF-IDF + MultinomialNB")
-    st.markdown("- Presented by:  **Abhishek Basu, Ananya Raj, Sneha Das, Payal Guin, Subhojit Khamrai**")
-    st.markdown("- Repo: `sms-spam-detection`")
-    st.markdown("- Purpose: Final year project")
+    st.markdown('<div class="h2">Project Info</div>', unsafe_allow_html=True)
+    st.markdown('- Model: **TF-IDF + MultinomialNB**')
+    st.markdown('- Demo by: **Your Name**')
+    st.markdown('- Repo: `sms-spam-detection`')
+    st.markdown('<br>', unsafe_allow_html=True)
+    st.metric("Test Accuracy (example)", "96%")
     st.markdown("<br>", unsafe_allow_html=True)
-
-    # Show simple metrics (placeholders — replace with real values if you want)
-    st.metric("Test Accuracy on Testing Data", "95.87%")
+    st.markdown("### Quick tests", unsafe_allow_html=True)
+    if st.button("Try spam sample (sidebar)"):
+        st.session_state.msg_input = "Free entry! Win cash now. Click http://claim.example"
+        st.session_state._predict = True
+    if st.button("Try ham sample (sidebar)"):
+        st.session_state.msg_input = "I'll be late by 10 minutes, stuck in traffic."
+        st.session_state._predict = True
     st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### Notes", unsafe_allow_html=True)
+    st.markdown("- Use public URL in slides.")
+    st.markdown("- Keep a recording as fallback.")
 
-    # quick sample buttons that update text area
-    st.markdown("### Quick tests")
-    for i, (txt, lbl) in enumerate(SAMPLES):
-        if st.button(f"Try sample {i+1}"):
-            st.session_state.message = txt
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("### Share / Notes", unsafe_allow_html=True)
-    st.markdown("- Use the public URL in your viva slides.")
-    st.markdown("- Add a short demo video as fallback in case of connectivity issues.")
     st.markdown("</div>", unsafe_allow_html=True)
 
-# Footer small note
-st.markdown("<br><div class='small-muted' style='text-align:center'>Tip: Use the Quick: Spam / Ham buttons to demo fast. Want a different color scheme? Ask and I'll create it.</div>", unsafe_allow_html=True)
+# Footer
+st.markdown("<br><div style='text-align:center;color:#9da7a9;font-size:13px'>Pro tip: Use Quick buttons to demonstrate cases quickly during your viva.</div>", unsafe_allow_html=True)
