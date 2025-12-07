@@ -137,7 +137,7 @@ def load_model(path=None):
             raise FileNotFoundError(f"model file not found at: {p.resolve()}")
 
     # try tokenized model first (preferred)
-    p1 = Path("model_tokenized.joblib")
+    p1 = Path("model.joblib")
     p2 = Path("model.joblib")
     if p1.exists():
         return joblib.load(p1)
