@@ -223,13 +223,13 @@ with right:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("### Project Info")
     st.markdown("- Model: TF-IDF + MultinomialNB")
-    st.markdown("- Presented by: **Abhishek Basu, Ananya Raj, Sneha Das, Payal Guin, Subhojit Khamrai**")
+    st.markdown("- Presented by:  **Abhishek Basu, Ananya Raj, Sneha Das, Payal Guin, Subhojit Khamrai**")
     st.markdown("- Repo: `sms-spam-detection`")
     st.markdown("- Purpose: Final year project demo / viva")
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Show simple metrics (placeholders — replace with real values if you want)
-    st.metric("Test Accuracy (example)", "96%")
+    st.metric("Test Accuracy (example)", "95.87%")
     st.markdown("<br>", unsafe_allow_html=True)
 
     # quick sample buttons that update text area
