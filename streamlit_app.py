@@ -259,7 +259,7 @@ with right:
     st.markdown("<div style='color:#9aa0a6'>Team and quick controls</div>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("### Team")
-    st.markdown("- **Abhishek Basu** (Lead)")
+    st.markdown("- **Abhishek Basu**")
     st.markdown("- Ananya Raj")
     st.markdown("- Sneha Das")
     st.markdown("- Payal Guin")
