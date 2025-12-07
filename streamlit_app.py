@@ -263,7 +263,7 @@ with right:
     st.markdown("- **Ananya Raj**")
     st.markdown("- **Sneha Das**")
     st.markdown("- **Payel Guin**")
-    st.markdown("- **Subhojit Khamrai**")
+    st.markdown("- **Subhajit Khamrai**")
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("### Quick tests", unsafe_allow_html=True)
     for i, (txt, lbl) in enumerate(SAMPLES):
