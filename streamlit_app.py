@@ -223,7 +223,7 @@ with right:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("### Project Info")
     st.markdown("- Model: TF-IDF + MultinomialNB")
-    st.markdown("- Demo by: **You / Your Name**")
+    st.markdown("- Presented by: **Abhishek Basu, Ananya Raj, Sneha Das, Payal Guin, Subhojit Khamrai**")
     st.markdown("- Repo: `sms-spam-detection`")
     st.markdown("- Purpose: Final year project demo / viva")
     st.markdown("<br>", unsafe_allow_html=True)
