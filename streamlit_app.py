@@ -262,7 +262,7 @@ with right:
     st.markdown("- **Abhishek Basu**")
     st.markdown("- **Ananya Raj**")
     st.markdown("- **Sneha Das**")
-    st.markdown("- **Payal Guin**")
+    st.markdown("- **Payel Guin**")
     st.markdown("- **Subhojit Khamrai**")
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("### Quick tests", unsafe_allow_html=True)
