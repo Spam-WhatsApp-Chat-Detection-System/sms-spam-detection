@@ -136,8 +136,8 @@ def load_model(path=None):
         else:
             raise FileNotFoundError(f"model file not found at: {p.resolve()}")
 
-    # try tokenized model first (preferred)
-    p1 = Path("model.joblib")
+    # try tokenized model first (preferred if you trained with tokens)
+    p1 = Path("model_tokenized.joblib")
     p2 = Path("model.joblib")
     if p1.exists():
         return joblib.load(p1)
@@ -228,6 +228,7 @@ with left:
             try:
                 # prefer model_path set by uploaded model, else try default loader
                 model_path = st.session_state.get("model_path", None)
+                model_path_in_use = None
                 if model_path:
                     model = load_model(model_path)
                     model_path_in_use = model_path
@@ -241,8 +242,27 @@ with left:
 
                 # use token-preserving cleaner (keeps __URL__ & __PHONE__)
                 cleaned = clean_text_keep_tokens(msg)
+                raw = clean_text(msg)
 
-                # If debug mode is on, show debugging info first
+                # helper to run a single predict attempt and return (pred, prob)
+                def run_predict(m, text):
+                    try:
+                        pred = m.predict([text])[0]
+                    except Exception as e:
+                        raise RuntimeError(f"model.predict failed: {e}")
+                    prob = None
+                    if hasattr(m, "predict_proba"):
+                        try:
+                            probv = m.predict_proba([text])[0]
+                            prob = float(np.max(probv))
+                        except Exception:
+                            prob = None
+                    return pred, prob
+
+                # attempt prediction using the cleaned (token-preserving) string first
+                pred, prob = run_predict(model, cleaned)
+
+                # Debug: show model info and also try raw text for comparison
                 if st.session_state.get("debug_enabled", False):
                     st.write("DEBUG: model_path_in_use =", model_path_in_use)
                     st.write("DEBUG: model.classes_:", getattr(model, "classes_", None))
@@ -253,24 +273,53 @@ with left:
                             st.write("DEBUG: TF-IDF vocab size:", len(steps["tfidf"].vocabulary_))
                     except Exception as e:
                         st.write("DEBUG: TF-IDF read error:", e)
-                    st.write("DEBUG: cleaned text:", cleaned)
-
-                # if pipeline expects raw text then passing cleaned may be okay; we trained tokenized model so use cleaned
-                pred = model.predict([cleaned])[0]
-                prob = None
-                if hasattr(model, "predict_proba"):
+                    st.write("DEBUG: cleaned (token-preserving):", cleaned)
+                    st.write("DEBUG: raw cleaned (no tokens):", raw)
                     try:
-                        probv = model.predict_proba([cleaned])[0]
-                        prob = float(np.max(probv))
-                        if st.session_state.get("debug_enabled", False):
-                            st.write("DEBUG: model.predict_proba(cleaned):", probv)
+                        pred_raw, prob_raw = run_predict(model, raw)
+                        st.write("DEBUG: prediction using raw cleaned text:", pred_raw, "prob:", prob_raw)
                     except Exception as e:
-                        if st.session_state.get("debug_enabled", False):
-                            st.write("DEBUG: predict_proba error:", e)
-                        prob = None
+                        st.write("DEBUG: raw predict error:", e)
+
+                # Interpret prediction robustly
+                is_spam = False
+                try:
+                    # If model returns string-like labels that mention "spam"
+                    pred_str = str(pred).lower()
+                    if pred_str in ("spam", "1", "true", "yes"):
+                        is_spam = True
+                    elif pred_str in ("ham", "0", "false", "no"):
+                        is_spam = False
+                    else:
+                        # fallback: inspect model.classes_ when numeric encodings may be used
+                        classes = getattr(model, "classes_", None)
+                        if classes is not None:
+                            # if classes contain 'spam' label, check which label equals pred
+                            classes_l = [str(c).lower() for c in classes]
+                            if "spam" in classes_l:
+                                # find index of pred in classes and see if it maps to 'spam'
+                                try:
+                                    pred_idx = list(classes_l).index(str(pred).lower())
+                                    is_spam = (classes_l[pred_idx] == "spam")
+                                except Exception:
+                                    # final fallback: check if pred corresponds to the numeric 1
+                                    is_spam = (str(pred) == "1")
+                            else:
+                                # common pattern: classes = [0,1] and 1 => spam
+                                try:
+                                    # treat pred as number if possible
+                                    if float(pred) == 1.0:
+                                        is_spam = True
+                                except Exception:
+                                    is_spam = False
+                        else:
+                            # if no classes_, fallback to textual check
+                            is_spam = (pred_str in ("spam", "1", "true", "yes"))
+                except Exception:
+                    is_spam = False
 
                 # show result banner
-                if str(pred).lower() in ("spam", "1", "true"):
+                if is_spam:
                     st.markdown('<div class="result-danger"> <strong>🚨 This message is SPAM</strong></div>', unsafe_allow_html=True)
                 else:
                     st.markdown('<div class="result-success"> <strong>✅ This message is NOT spam</strong></div>', unsafe_allow_html=True)
