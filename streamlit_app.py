@@ -331,7 +331,7 @@ with left:
                 if is_spam:
                     st.markdown('<div class="result-danger"> <strong>🚨 Be Careful This message Looks SPAM</strong></div>', unsafe_allow_html=True)
                 else:
-                    st.markdown('<div class="result-success"> <strong>✅ No Need to Worry this message Looks Save</strong></div>', unsafe_allow_html=True)
+                    st.markdown('<div class="result-success"> <strong>✅ No Need to Worry this message Looks Safe</strong></div>', unsafe_allow_html=True)
 
                 # show a confidence bar for the spam probability if available, else show max-prob
                 if spam_prob is not None:
