@@ -244,23 +244,24 @@ with left:
                 cleaned = clean_text_keep_tokens(msg)
                 raw = clean_text(msg)
 
-                # helper to run a single predict attempt and return (pred, prob)
+                # helper to run a single predict attempt and return (pred, prob_vector)
                 def run_predict(m, text):
                     try:
                         pred = m.predict([text])[0]
                     except Exception as e:
                         raise RuntimeError(f"model.predict failed: {e}")
-                    prob = None
+                    probv = None
                     if hasattr(m, "predict_proba"):
                         try:
                             probv = m.predict_proba([text])[0]
-                            prob = float(np.max(probv))
                         except Exception:
-                            prob = None
-                    return pred, prob
+                            probv = None
+                    return pred, probv
 
                 # attempt prediction using the cleaned (token-preserving) string first
-                pred, prob = run_predict(model, cleaned)
+                pred, probv = run_predict(model, cleaned)
+                # compute a fallback "max" probability if probv exists
+                prob_max = float(np.max(probv)) if probv is not None else None
 
                 # Debug: show model info and also try raw text for comparison
                 if st.session_state.get("debug_enabled", False):
@@ -275,48 +276,56 @@ with left:
                         st.write("DEBUG: TF-IDF read error:", e)
                     st.write("DEBUG: cleaned (token-preserving):", cleaned)
                     st.write("DEBUG: raw cleaned (no tokens):", raw)
+                    st.write("DEBUG: model.predict_proba(cleaned):", probv)
                     try:
-                        pred_raw, prob_raw = run_predict(model, raw)
-                        st.write("DEBUG: prediction using raw cleaned text:", pred_raw, "prob:", prob_raw)
+                        pred_raw, probv_raw = run_predict(model, raw)
+                        st.write("DEBUG: prediction using raw cleaned text:", pred_raw, "prob:", probv_raw)
                     except Exception as e:
                         st.write("DEBUG: raw predict error:", e)
 
-                # Interpret prediction robustly
+                # -------------------------
+                # Interpret prediction using spam probability (preferred)
+                # -------------------------
+                SPAM_THRESHOLD = 0.50  # change to 0.40 to be more sensitive (more spam detected)
+
+                # Default values
                 is_spam = False
-                try:
-                    # If model returns string-like labels that mention "spam"
-                    pred_str = str(pred).lower()
-                    if pred_str in ("spam", "1", "true", "yes"):
-                        is_spam = True
-                    elif pred_str in ("ham", "0", "false", "no"):
-                        is_spam = False
-                    else:
-                        # fallback: inspect model.classes_ when numeric encodings may be used
+                spam_prob = None
+
+                # If we have a probability vector, inspect class order
+                if probv is not None:
+                    try:
                         classes = getattr(model, "classes_", None)
                         if classes is not None:
-                            # if classes contain 'spam' label, check which label equals pred
                             classes_l = [str(c).lower() for c in classes]
-                            if "spam" in classes_l:
-                                # find index of pred in classes and see if it maps to 'spam'
-                                try:
-                                    pred_idx = list(classes_l).index(str(pred).lower())
-                                    is_spam = (classes_l[pred_idx] == "spam")
-                                except Exception:
-                                    # final fallback: check if pred corresponds to the numeric 1
-                                    is_spam = (str(pred) == "1")
-                            else:
-                                # common pattern: classes = [0,1] and 1 => spam
-                                try:
-                                    # treat pred as number if possible
-                                    if float(pred) == 1.0:
-                                        is_spam = True
-                                except Exception:
-                                    is_spam = False
+                            # find spam index (fallback to index 1 if not found)
+                            try:
+                                spam_idx = classes_l.index("spam")
+                            except ValueError:
+                                if "1" in classes_l:
+                                    spam_idx = classes_l.index("1")
+                                else:
+                                    spam_idx = 1 if len(classes_l) > 1 else 0
+                            spam_prob = float(probv[spam_idx])
+                            is_spam = (spam_prob >= SPAM_THRESHOLD)
                         else:
-                            # if no classes_, fallback to textual check
-                            is_spam = (pred_str in ("spam", "1", "true", "yes"))
-                except Exception:
-                    is_spam = False
+                            # no classes_ available, fallback to textual pred
+                            is_spam = str(pred).lower() in ("spam", "1", "true", "yes")
+                    except Exception:
+                        try:
+                            is_spam = str(pred).lower() in ("spam", "1", "true", "yes")
+                        except Exception:
+                            is_spam = False
+                else:
+                    # no probability info available: fallback to textual pred and classes
+                    try:
+                        pred_str = str(pred).lower()
+                        if pred_str in ("spam", "1", "true", "yes"):
+                            is_spam = True
+                        else:
+                            is_spam = False
+                    except Exception:
+                        is_spam = False
 
                 # show result banner
                 if is_spam:
@@ -324,14 +333,20 @@ with left:
                 else:
                     st.markdown('<div class="result-success"> <strong>✅ This message is NOT spam</strong></div>', unsafe_allow_html=True)
 
-                # confidence bar
-                if prob is not None:
-                    pct = int(round(prob*100))
-                    st.markdown(f"<div style='margin-top:12px'><div class='small-muted'>Confidence</div></div>", unsafe_allow_html=True)
+                # show a confidence bar for the spam probability if available, else show max-prob
+                if spam_prob is not None:
+                    pct = int(round(spam_prob * 100))
+                    st.markdown(f"<div style='margin-top:12px'><div class='small-muted'>Spam probability</div></div>", unsafe_allow_html=True)
                     st.progress(pct)
-                    st.write(f"Model confidence: **{pct}%**")
+                    st.write(f"Model spam probability: **{pct}%**")
                 else:
-                    st.write("Model confidence: **N/A**")
+                    if prob_max is not None:
+                        pct = int(round(prob_max * 100))
+                        st.markdown(f"<div style='margin-top:12px'><div class='small-muted'>Confidence</div></div>", unsafe_allow_html=True)
+                        st.progress(pct)
+                        st.write(f"Model confidence: **{pct}%**")
+                    else:
+                        st.write("Model confidence: **N/A**")
 
             except FileNotFoundError as fe:
                 st.error(str(fe))
