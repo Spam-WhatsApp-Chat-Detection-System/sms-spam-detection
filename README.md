@@ -4,7 +4,7 @@ A polished machine-learning application for detecting SMS & WhatsApp spam using 
 This project goes beyond a basic classifier and includes a presentation-ready UI, animated interactions, batch CSV predictions, prediction history, confetti effects, and a model upload feature — ideal for academic demonstrations, viva, portfolios, and machine-learning showcases.
 
 Developed by
-Abhishek Basu, Ananya Raj, Sneha Das, Payal Guin, Subhojit Khamrai
+Abhishek Basu, Ananya Raj, Sneha Das, Payel Guin, Subhajit Khamrai
 
 🚀 Features (Expanded)
 
