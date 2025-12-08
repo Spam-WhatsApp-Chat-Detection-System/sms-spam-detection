@@ -376,7 +376,7 @@ with right:
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Show simple metrics (placeholders — replace with real values if you want)
-    st.metric("Test Accuracy on Testing Data", "95.87%")
+    st.metric("Test Accuracy on Testing Data", "97.55%")
     st.markdown("<br>", unsafe_allow_html=True)
 
     # quick sample buttons that update text area
