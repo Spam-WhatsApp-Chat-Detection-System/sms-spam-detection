@@ -1,6 +1,5 @@
-# streamlit_app_ui_redesign.py
-# UI-redesigned version of the user's original streamlit_app.py
-# All original logic, functions and behavior are preserved. Only the UI layer (layout, styling, HTML/CSS) has been replaced.
+# streamlit_app.py
+# Fixed UI + working typewriter + same app logic preserved
 
 import streamlit as st
 import joblib
@@ -10,9 +9,10 @@ import time
 from pathlib import Path
 import pandas as pd
 import base64
+import random
 
 # -------------------------
-# Styling (custom CSS + animations)
+# CSS (kept/cleaned)
 # -------------------------
 PAGE_CSS = """
 <style>
@@ -127,12 +127,9 @@ textarea[aria-label="Message"] {
 """
 
 # -------------------------
-# Utilities (cleaners + model loader)
-# (Kept exactly the same as original; only comments/formatting adjusted)
+# Utilities (same logic)
 # -------------------------
-
 def clean_text(s: str):
-    """Original simpler cleaner (kept for reference)."""
     if not isinstance(s, str):
         s = str(s)
     s = s.lower()
@@ -141,11 +138,7 @@ def clean_text(s: str):
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
-
 def clean_text_keep_tokens(s: str):
-    """Token-preserving cleaner: replace URLs and long numbers with tokens.
-    This matches the preprocessing used for the tokenized model.
-    """
     if not isinstance(s, str):
         s = str(s)
     s = s.lower()
@@ -155,16 +148,13 @@ def clean_text_keep_tokens(s: str):
     s = re.sub(r'\s+', ' ', s).strip()
     return s
 
-
 def load_model(path=None):
-    """Load model. If path is provided, try it; otherwise try model_tokenized.joblib then model.joblib."""
     if path:
         p = Path(path)
         if p.exists():
             return joblib.load(p)
         else:
             raise FileNotFoundError(f"model file not found at: {p.resolve()}")
-
     p1 = Path("model_tokenized.joblib")
     p2 = Path("model.joblib")
     if p1.exists():
@@ -173,7 +163,6 @@ def load_model(path=None):
         return joblib.load(p2)
     raise FileNotFoundError(f"model file not found (tried: {p1.resolve()}, {p2.resolve()})")
 
-
 def download_link(df: pd.DataFrame, filename: str):
     csv = df.to_csv(index=False)
     b64 = base64.b64encode(csv.encode()).decode()
@@ -181,7 +170,7 @@ def download_link(df: pd.DataFrame, filename: str):
     return href
 
 # -------------------------
-# Samples (same)
+# Samples
 # -------------------------
 SAMPLES = [
     ("Congratulations! You have won a FREE iPhone. Click here to claim: http://bit.ly/win-phone", "Spam"),
@@ -193,12 +182,12 @@ SAMPLES = [
 ]
 
 # -------------------------
-# App layout (UI redesigned)
+# App layout
 # -------------------------
 st.set_page_config(page_title="SMS / WhatsApp Spam Detector", layout="wide", initial_sidebar_state="expanded")
 st.markdown(PAGE_CSS, unsafe_allow_html=True)
 
-# Header: brand + typewriter subtitle
+# Header
 col1, col2 = st.columns([0.12, 0.88])
 with col1:
     st.markdown('<div class="brand-icon">✉️</div>', unsafe_allow_html=True)
@@ -207,40 +196,39 @@ with col2:
         '<div class="header"><div><h1 class="title">SMS / WhatsApp Spam Detector</h1>'
         '<div class="subtitle small-muted">Real-time spam classification — demo & presentation ready</div>'
         '<div style="height:8px"></div>'
-        '<div class="typewriter" id="typewriter">Detecting inbox threats <span class="cursor">|</span></div>'
+        '<div class="typewriter"> <span id="typewriter-text">Detecting inbox threats</span> <span class="cursor">|</span></div>'
         '</div></div>', unsafe_allow_html=True)
 
-# Small script for typewriter rotating words (pure front-end)
-TYPEWRITER_JS = """
+# Robust typewriter injection: provide a small HTML block including the script and set a height so the script runs.
+typewriter_html = """
+<div style="display:none;">
 <script>
-const phrases = ["Detecting inbox threats", "Catch scams automatically", "Keep your chats clean", "Demo-ready & fast"];
-let i = 0;
-let j = 0;
-let current = '';
-let isDeleting = false;
-const speed = 80;
-function tick(){
-  const el = document.getElementById('typewriter');
-  if(!el) return;
-  const full = phrases[i];
-  if(isDeleting){
-    current = full.substring(0, j--);
-  } else {
-    current = full.substring(0, j++);
+(function(){
+  const phrases = ["Detecting inbox threats","Catch scams automatically","Keep your chats clean","Demo-ready & fast"];
+  let i = 0, j = 0, current = '', isDeleting = false;
+  const speed = 70;
+  function tick(){
+    const el = document.getElementById('typewriter-text');
+    if(!el) return;
+    const full = phrases[i];
+    if(isDeleting){ current = full.substring(0, j--); }
+    else { current = full.substring(0, j++); }
+    el.innerText = current;
+    if(!isDeleting && j===full.length+1){ isDeleting=true; setTimeout(tick,900); }
+    else if(isDeleting && j===0){ isDeleting=false; i=(i+1)%phrases.length; setTimeout(tick,300); }
+    else { setTimeout(tick, speed); }
   }
-  el.childNodes[0].textContent = current;
-  if(!isDeleting && j===full.length+1){ isDeleting = true; setTimeout(tick, 900); }
-  else if(isDeleting && j===0){ isDeleting=false; i=(i+1)%phrases.length; setTimeout(tick, 300); }
-  else { setTimeout(tick, speed); }
-}
-setTimeout(tick, 800);
+  setTimeout(tick, 500);
+})();
 </script>
+</div>
 """
-st.components.v1.html(TYPEWRITER_JS, height=0)
+# Put the script into the page (height small but >0 so Streamlit executes it)
+st.components.v1.html(typewriter_html, height=1)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Sidebar: theme toggle, model info, small avatar
+# Sidebar
 with st.sidebar:
     st.markdown('<div style="text-align:center"><h3 style="margin-bottom:4px">Demo Controls</h3></div>', unsafe_allow_html=True)
     theme = st.radio("Theme", ["Dark (default)", "Light"], index=0)
@@ -260,47 +248,44 @@ with st.sidebar:
     st.markdown("Repo: `sms-spam-detection`")
     st.markdown("Purpose: Final year project")
 
-# Main content columns (improved layout)
+# Main layout
 left, right = st.columns([2, 1])
 
 with left:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("### Enter a message")
-    msg = st.text_area("Message", value="Your appointment is confirmed for Monday at 4pm.", key="message")
+    # text_area uses session_state key "message" so programmatic updates reflect in the UI
+    if "message" not in st.session_state:
+        st.session_state["message"] = "Your appointment is confirmed for Monday at 4pm."
+    msg = st.text_area("Message", value=st.session_state["message"], key="message")
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    # buttons row
+    # buttons
     c1, c2, c3, c4 = st.columns([1,1,1,1])
     with c1:
         if st.button("Predict", key="predict"):
             st.session_state._do_predict = True
     with c2:
         if st.button("Quick: Spam sample", key="samp_spam"):
-            st.session_state.message = SAMPLES[0][0]
-            msg = st.session_state.message
+            st.session_state["message"] = SAMPLES[0][0]
     with c3:
         if st.button("Quick: Ham sample", key="samp_ham"):
-            st.session_state.message = SAMPLES[2][0]
-            msg = st.session_state.message
+            st.session_state["message"] = SAMPLES[2][0]
     with c4:
         if st.button("Random sample", key="random_sample"):
-            import random
             txt, _ = random.choice(SAMPLES)
-            st.session_state.message = txt
-            msg = txt
+            st.session_state["message"] = txt
 
     st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
 
-    # Advanced options (kept content same but with UX polish)
     with st.expander("Advanced options & diagnostics", expanded=False):
         st.markdown("- Model: **scikit-learn Pipeline** (TF-IDF + MultinomialNB).")
         st.markdown("- Tip: paste messages containing links or phone numbers to test edge cases.")
         st.markdown("- If your model was trained with different preprocessing, results may vary.")
         st.checkbox("Show debug output (legacy checkbox)", key="debug_enabled_legacy")
 
-    # Predict & show result (original logic preserved)
+    # Prediction logic (kept identical)
     if st.session_state.get("_do_predict", False):
-        # run prediction with spinner
         with st.spinner("Analyzing message..."):
             time.sleep(0.6)
             try:
@@ -335,7 +320,6 @@ with left:
                 pred, probv = run_predict(model, cleaned)
                 prob_max = float(np.max(probv)) if probv is not None else None
 
-                # debug outputs preserved
                 if st.session_state.get("debug_enabled", False) or st.session_state.get("debug_enabled_checkbox", False) or st.session_state.get("debug_enabled_legacy", False):
                     st.write("DEBUG: model_path_in_use =", model_path_in_use)
                     st.write("DEBUG: model.classes_:", getattr(model, "classes_", None))
@@ -355,9 +339,6 @@ with left:
                     except Exception as e:
                         st.write("DEBUG: raw predict error:", e)
 
-                # -------------------------
-                # Interpret prediction using spam probability (preferred)
-                # -------------------------
                 SPAM_THRESHOLD = 0.50
                 is_spam = False
                 spam_prob = None
@@ -393,18 +374,15 @@ with left:
                     except Exception:
                         is_spam = False
 
-                # show result banner (enhanced display)
                 if is_spam:
                     st.markdown('<div class="result-danger"> <strong>🚨 Be Careful — this message looks SPAM</strong></div>', unsafe_allow_html=True)
                 else:
                     st.markdown('<div class="result-success"> <strong>✅ Looks Safe</strong></div>', unsafe_allow_html=True)
 
-                # show probability visualization
                 if spam_prob is not None:
                     pct = int(round(spam_prob * 100))
                     st.markdown(f"<div style='margin-top:12px'><div class='small-muted'>Spam probability</div></div>", unsafe_allow_html=True)
-                    # animated progress bar via CSS width change
-                    bar_html = f"<div class='prob-wrap'><div class='prob-bar' id='probbar' style='width:{pct}%;'></div></div>"
+                    bar_html = f"<div class='prob-wrap'><div class='prob-bar' style='width:{pct}%;'></div></div>"
                     st.markdown(bar_html, unsafe_allow_html=True)
                     st.markdown(f"<div class='prob-label'>{pct}%</div>", unsafe_allow_html=True)
                     st.write(f"Model spam probability: **{pct}%**")
@@ -425,7 +403,7 @@ with left:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Examples / demo table (card)
+    # Examples
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("### Example messages")
     for text, label in SAMPLES:
@@ -448,7 +426,7 @@ with right:
     st.markdown("### Quick tests")
     for i, (txt, lbl) in enumerate(SAMPLES):
         if st.button(f"Try sample {i+1}"):
-            st.session_state.message = txt
+            st.session_state["message"] = txt
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("### Share / Notes", unsafe_allow_html=True)
@@ -456,7 +434,4 @@ with right:
     st.markdown("- Add a short demo video as fallback in case of connectivity issues.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# Footer small note
 st.markdown("<br><div class='small-muted' style='text-align:center'>Tip: Use the Quick: Spam / Ham buttons to demo fast. Want a different color scheme? Ask and I'll create it.</div>", unsafe_allow_html=True)
-
-# End of file
