@@ -1,4 +1,7 @@
-# streamlit_app.py
+# streamlit_app_ui_redesign.py
+# UI-redesigned version of the user's original streamlit_app.py
+# All original logic, functions and behavior are preserved. Only the UI layer (layout, styling, HTML/CSS) has been replaced.
+
 import streamlit as st
 import joblib
 import re
@@ -9,16 +12,25 @@ import pandas as pd
 import base64
 
 # -------------------------
-# Styling (custom CSS)
+# Styling (custom CSS + animations)
 # -------------------------
 PAGE_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
 
+:root{
+  --bg1: #0f1115;
+  --bg2: #0b0c0f;
+  --card-bg: rgba(255,255,255,0.02);
+  --muted: #9aa0a6;
+  --accent1: #ff7a59;
+  --accent2: #7bd389;
+}
+
 html, body, [class*="css"]  {
     font-family: "Inter", sans-serif;
     color: #e6e6e6;
-    background: linear-gradient(180deg, #0f1115 0%, #0b0c0f 60%);
+    background: linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 60%);
 }
 
 /* Header */
@@ -33,8 +45,8 @@ html, body, [class*="css"]  {
     display:flex;
     align-items:center;
     justify-content:center;
-    background: linear-gradient(135deg,#ff7a59,#ffb86b);
-    box-shadow: 0 8px 30px rgba(255,120,90,0.14);
+    background: linear-gradient(135deg,var(--accent1),#ffb86b);
+    box-shadow: 0 10px 40px rgba(255,120,90,0.12);
     font-size:34px;
 }
 .title {
@@ -45,21 +57,28 @@ html, body, [class*="css"]  {
 }
 .subtitle { color: #c7c7c7; margin-top:4px; }
 
+/* Typewriter */
+.typewriter { font-weight:700; font-size:20px; color:#dfe6f0; }
+.typewriter .cursor{ color: var(--accent1); margin-left:6px; animation: blink 1s infinite; }
+@keyframes blink{ 50% { opacity: 0 } }
+
 /* Card */
 .card {
     background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
     border-radius: 14px;
     padding: 22px;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.6);
     border: 1px solid rgba(255,255,255,0.03);
+    transition: transform .18s ease, box-shadow .18s ease;
 }
+.card:hover{ transform: translateY(-6px); box-shadow: 0 18px 60px rgba(0,0,0,0.6); }
 
 /* Text area */
 textarea[aria-label="Message"] {
-    background: rgba(0,0,0,0.4) !important;
+    background: rgba(0,0,0,0.45) !important;
     color: #f0f0f0 !important;
-    border-radius: 10px !important;
-    padding: 16px !important;
+    border-radius: 12px !important;
+    padding: 14px !important;
     height: 160px !important;
     border: 1px solid rgba(255,255,255,0.04) !important;
 }
@@ -69,7 +88,7 @@ textarea[aria-label="Message"] {
     border-radius: 12px;
     padding: 10px 18px;
     font-weight:600;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
 }
 
 /* Result banners */
@@ -82,22 +101,34 @@ textarea[aria-label="Message"] {
     padding:14px;border-radius:10px;color:#ffd6d6;
 }
 
+/* animated probability bar */
+.prob-wrap{ width:100%; background:rgba(255,255,255,0.03); border-radius:10px; padding:6px; }
+.prob-bar{ height:18px; border-radius:8px; background:linear-gradient(90deg,var(--accent1), #ffb86b); width:0%; transition: width 1s ease; }
+.prob-label{ font-weight:700; margin-top:8px; }
+
 /* small helper */
-.small-muted { color: #9aa0a6; font-size:13px; }
+.small-muted { color: var(--muted); font-size:13px; }
 
 /* examples table */
 .example-row {
-    padding:8px 12px; border-radius:8px;
+    padding:10px 14px; border-radius:10px;
     background: rgba(255,255,255,0.01);
-    margin-bottom:8px;
+    margin-bottom:10px;
     border: 1px solid rgba(255,255,255,0.02);
 }
+
+/* sidebar tweak */
+[data-testid="stSidebar"]{ background: linear-gradient(180deg,#071018, #08121a); }
+
+/* responsive tweaks */
+@media (max-width: 768px){ .title{ font-size:22px } }
 
 </style>
 """
 
 # -------------------------
 # Utilities (cleaners + model loader)
+# (Kept exactly the same as original; only comments/formatting adjusted)
 # -------------------------
 
 def clean_text(s: str):
@@ -110,6 +141,7 @@ def clean_text(s: str):
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
+
 def clean_text_keep_tokens(s: str):
     """Token-preserving cleaner: replace URLs and long numbers with tokens.
     This matches the preprocessing used for the tokenized model.
@@ -117,18 +149,15 @@ def clean_text_keep_tokens(s: str):
     if not isinstance(s, str):
         s = str(s)
     s = s.lower()
-    # replace URLs with a clear token
     s = re.sub(r'(https?://\S+|www\.\S+)', ' __URL__ ', s)
-    # replace phone-like long numbers (6+ digits) with a token
     s = re.sub(r'\b\d{6,}\b', ' __PHONE__ ', s)
-    # remove other punctuation but keep underscores from tokens
     s = re.sub(r'[^a-z0-9_\s]', ' ', s)
     s = re.sub(r'\s+', ' ', s).strip()
     return s
 
+
 def load_model(path=None):
     """Load model. If path is provided, try it; otherwise try model_tokenized.joblib then model.joblib."""
-    # if explicit path given
     if path:
         p = Path(path)
         if p.exists():
@@ -136,7 +165,6 @@ def load_model(path=None):
         else:
             raise FileNotFoundError(f"model file not found at: {p.resolve()}")
 
-    # try tokenized model first (preferred if you trained with tokens)
     p1 = Path("model_tokenized.joblib")
     p2 = Path("model.joblib")
     if p1.exists():
@@ -145,6 +173,7 @@ def load_model(path=None):
         return joblib.load(p2)
     raise FileNotFoundError(f"model file not found (tried: {p1.resolve()}, {p2.resolve()})")
 
+
 def download_link(df: pd.DataFrame, filename: str):
     csv = df.to_csv(index=False)
     b64 = base64.b64encode(csv.encode()).decode()
@@ -152,7 +181,7 @@ def download_link(df: pd.DataFrame, filename: str):
     return href
 
 # -------------------------
-# Samples
+# Samples (same)
 # -------------------------
 SAMPLES = [
     ("Congratulations! You have won a FREE iPhone. Click here to claim: http://bit.ly/win-phone", "Spam"),
@@ -164,31 +193,84 @@ SAMPLES = [
 ]
 
 # -------------------------
-# App layout
+# App layout (UI redesigned)
 # -------------------------
-st.set_page_config(page_title="SMS / WhatsApp Spam Detector", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="SMS / WhatsApp Spam Detector", layout="wide", initial_sidebar_state="expanded")
 st.markdown(PAGE_CSS, unsafe_allow_html=True)
 
-# Header
+# Header: brand + typewriter subtitle
 col1, col2 = st.columns([0.12, 0.88])
 with col1:
     st.markdown('<div class="brand-icon">✉️</div>', unsafe_allow_html=True)
 with col2:
-    st.markdown('<div class="header"><div><h1 class="title">SMS / WhatsApp Spam Detector</h1><div class="subtitle small-muted">Real-time spam classification — demo & presentation ready</div></div></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="header"><div><h1 class="title">SMS / WhatsApp Spam Detector</h1>'
+        '<div class="subtitle small-muted">Real-time spam classification — demo & presentation ready</div>'
+        '<div style="height:8px"></div>'
+        '<div class="typewriter" id="typewriter">Detecting inbox threats <span class="cursor">|</span></div>'
+        '</div></div>', unsafe_allow_html=True)
+
+# Small script for typewriter rotating words (pure front-end)
+TYPEWRITER_JS = """
+<script>
+const phrases = ["Detecting inbox threats", "Catch scams automatically", "Keep your chats clean", "Demo-ready & fast"];
+let i = 0;
+let j = 0;
+let current = '';
+let isDeleting = false;
+const speed = 80;
+function tick(){
+  const el = document.getElementById('typewriter');
+  if(!el) return;
+  const full = phrases[i];
+  if(isDeleting){
+    current = full.substring(0, j--);
+  } else {
+    current = full.substring(0, j++);
+  }
+  el.childNodes[0].textContent = current;
+  if(!isDeleting && j===full.length+1){ isDeleting = true; setTimeout(tick, 900); }
+  else if(isDeleting && j===0){ isDeleting=false; i=(i+1)%phrases.length; setTimeout(tick, 300); }
+  else { setTimeout(tick, speed); }
+}
+setTimeout(tick, 800);
+</script>
+"""
+st.components.v1.html(TYPEWRITER_JS, height=0)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Main content columns
+# Sidebar: theme toggle, model info, small avatar
+with st.sidebar:
+    st.markdown('<div style="text-align:center"><h3 style="margin-bottom:4px">Demo Controls</h3></div>', unsafe_allow_html=True)
+    theme = st.radio("Theme", ["Dark (default)", "Light"], index=0)
+    st.markdown("---")
+    st.markdown("**Model loader**")
+    uploaded_model = st.file_uploader("Upload a scikit-learn pipeline (.joblib)", type=["joblib", "pkl"], key="upload_sidebar")
+    if uploaded_model is not None:
+        tmp_path = Path("uploaded_model.joblib")
+        tmp_path.write_bytes(uploaded_model.read())
+        st.session_state["model_path"] = str(tmp_path.resolve())
+        st.success("Uploaded model will be used for predictions.")
+    st.markdown("---")
+    st.checkbox("Enable debug output (show model & cleaned text)", key="debug_enabled_checkbox")
+    st.markdown("---")
+    st.markdown("### About")
+    st.markdown("Presented by: **Abhishek Basu & team**")
+    st.markdown("Repo: `sms-spam-detection`")
+    st.markdown("Purpose: Final year project")
+
+# Main content columns (improved layout)
 left, right = st.columns([2, 1])
 
 with left:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-
-    st.markdown("#### Enter a message and press **Predict**", unsafe_allow_html=True)
+    st.markdown("### Enter a message")
     msg = st.text_area("Message", value="Your appointment is confirmed for Monday at 4pm.", key="message")
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    c1, c2, c3 = st.columns([1,1,1])
+    # buttons row
+    c1, c2, c3, c4 = st.columns([1,1,1,1])
     with c1:
         if st.button("Predict", key="predict"):
             st.session_state._do_predict = True
@@ -200,51 +282,43 @@ with left:
         if st.button("Quick: Ham sample", key="samp_ham"):
             st.session_state.message = SAMPLES[2][0]
             msg = st.session_state.message
+    with c4:
+        if st.button("Random sample", key="random_sample"):
+            import random
+            txt, _ = random.choice(SAMPLES)
+            st.session_state.message = txt
+            msg = txt
 
-    st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
 
-    # Advanced options row
+    # Advanced options (kept content same but with UX polish)
     with st.expander("Advanced options & diagnostics", expanded=False):
         st.markdown("- Model: **scikit-learn Pipeline** (TF-IDF + MultinomialNB).")
         st.markdown("- Tip: paste messages containing links or phone numbers to test edge cases.")
         st.markdown("- If your model was trained with different preprocessing, results may vary.")
+        st.checkbox("Show debug output (legacy checkbox)", key="debug_enabled_legacy")
 
-        # allow user to upload a model; also a debug toggle
-        uploaded_model = st.file_uploader("Upload a scikit-learn pipeline (.joblib)", type=["joblib", "pkl"])
-        if uploaded_model is not None:
-            tmp_path = Path("uploaded_model.joblib")
-            tmp_path.write_bytes(uploaded_model.read())
-            st.session_state["model_path"] = str(tmp_path.resolve())
-            st.success("Uploaded model will be used for predictions.")
-
-        debug_enabled = st.checkbox("Enable debug output (show model & cleaned text)", value=False)
-        st.session_state["debug_enabled"] = bool(debug_enabled)
-
-    # Predict & show result
+    # Predict & show result (original logic preserved)
     if st.session_state.get("_do_predict", False):
         # run prediction with spinner
         with st.spinner("Analyzing message..."):
-            time.sleep(0.6)  # minor delay for UX polish
+            time.sleep(0.6)
             try:
-                # prefer model_path set by uploaded model, else try default loader
                 model_path = st.session_state.get("model_path", None)
                 model_path_in_use = None
                 if model_path:
                     model = load_model(model_path)
                     model_path_in_use = model_path
                 else:
-                    model = load_model()  # will attempt tokenized then model.joblib
-                    # find which file we used
+                    model = load_model()
                     if Path("model_tokenized.joblib").exists():
                         model_path_in_use = "model_tokenized.joblib"
                     else:
                         model_path_in_use = "model.joblib"
 
-                # use token-preserving cleaner (keeps __URL__ & __PHONE__)
                 cleaned = clean_text_keep_tokens(msg)
                 raw = clean_text(msg)
 
-                # helper to run a single predict attempt and return (pred, prob_vector)
                 def run_predict(m, text):
                     try:
                         pred = m.predict([text])[0]
@@ -258,13 +332,11 @@ with left:
                             probv = None
                     return pred, probv
 
-                # attempt prediction using the cleaned (token-preserving) string first
                 pred, probv = run_predict(model, cleaned)
-                # compute a fallback "max" probability if probv exists
                 prob_max = float(np.max(probv)) if probv is not None else None
 
-                # Debug: show model info and also try raw text for comparison
-                if st.session_state.get("debug_enabled", False):
+                # debug outputs preserved
+                if st.session_state.get("debug_enabled", False) or st.session_state.get("debug_enabled_checkbox", False) or st.session_state.get("debug_enabled_legacy", False):
                     st.write("DEBUG: model_path_in_use =", model_path_in_use)
                     st.write("DEBUG: model.classes_:", getattr(model, "classes_", None))
                     steps = getattr(model, "named_steps", None)
@@ -286,19 +358,15 @@ with left:
                 # -------------------------
                 # Interpret prediction using spam probability (preferred)
                 # -------------------------
-                SPAM_THRESHOLD = 0.50  # change to 0.40 to be more sensitive (more spam detected)
-
-                # Default values
+                SPAM_THRESHOLD = 0.50
                 is_spam = False
                 spam_prob = None
 
-                # If we have a probability vector, inspect class order
                 if probv is not None:
                     try:
                         classes = getattr(model, "classes_", None)
                         if classes is not None:
                             classes_l = [str(c).lower() for c in classes]
-                            # find spam index (fallback to index 1 if not found)
                             try:
                                 spam_idx = classes_l.index("spam")
                             except ValueError:
@@ -309,7 +377,6 @@ with left:
                             spam_prob = float(probv[spam_idx])
                             is_spam = (spam_prob >= SPAM_THRESHOLD)
                         else:
-                            # no classes_ available, fallback to textual pred
                             is_spam = str(pred).lower() in ("spam", "1", "true", "yes")
                     except Exception:
                         try:
@@ -317,7 +384,6 @@ with left:
                         except Exception:
                             is_spam = False
                 else:
-                    # no probability info available: fallback to textual pred and classes
                     try:
                         pred_str = str(pred).lower()
                         if pred_str in ("spam", "1", "true", "yes"):
@@ -327,17 +393,20 @@ with left:
                     except Exception:
                         is_spam = False
 
-                # show result banner
+                # show result banner (enhanced display)
                 if is_spam:
-                    st.markdown('<div class="result-danger"> <strong>🚨 Be Careful This message Looks SPAM</strong></div>', unsafe_allow_html=True)
+                    st.markdown('<div class="result-danger"> <strong>🚨 Be Careful — this message looks SPAM</strong></div>', unsafe_allow_html=True)
                 else:
-                    st.markdown('<div class="result-success"> <strong>✅ No Need to Worry this message Looks Safe</strong></div>', unsafe_allow_html=True)
+                    st.markdown('<div class="result-success"> <strong>✅ Looks Safe</strong></div>', unsafe_allow_html=True)
 
-                # show a confidence bar for the spam probability if available, else show max-prob
+                # show probability visualization
                 if spam_prob is not None:
                     pct = int(round(spam_prob * 100))
                     st.markdown(f"<div style='margin-top:12px'><div class='small-muted'>Spam probability</div></div>", unsafe_allow_html=True)
-                    st.progress(pct)
+                    # animated progress bar via CSS width change
+                    bar_html = f"<div class='prob-wrap'><div class='prob-bar' id='probbar' style='width:{pct}%;'></div></div>"
+                    st.markdown(bar_html, unsafe_allow_html=True)
+                    st.markdown(f"<div class='prob-label'>{pct}%</div>", unsafe_allow_html=True)
                     st.write(f"Model spam probability: **{pct}%**")
                 else:
                     if prob_max is not None:
@@ -352,19 +421,17 @@ with left:
                 st.error(str(fe))
             except Exception as e:
                 st.error("Prediction failed: " + str(e))
-        # reset flag so Predict button can be used again
         st.session_state._do_predict = False
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # Examples / demo table
-    st.markdown("<br>", unsafe_allow_html=True)
+    # Examples / demo table (card)
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("### Example messages")
     for text, label in SAMPLES:
         label_badge = "🔴 SPAM" if label.lower()=="spam" else "🟢 HAM"
         st.markdown(f'<div class="example-row"><strong>{label_badge}</strong> &nbsp; {text}</div>', unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with right:
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -375,11 +442,9 @@ with right:
     st.markdown("- Purpose: Final year project")
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Show simple metrics (placeholders — replace with real values if you want)
     st.metric("Test Accuracy on Testing Data", "97.55%")
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # quick sample buttons that update text area
     st.markdown("### Quick tests")
     for i, (txt, lbl) in enumerate(SAMPLES):
         if st.button(f"Try sample {i+1}"):
@@ -389,7 +454,9 @@ with right:
     st.markdown("### Share / Notes", unsafe_allow_html=True)
     st.markdown("- Use the public URL in your viva slides.")
     st.markdown("- Add a short demo video as fallback in case of connectivity issues.")
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # Footer small note
 st.markdown("<br><div class='small-muted' style='text-align:center'>Tip: Use the Quick: Spam / Ham buttons to demo fast. Want a different color scheme? Ask and I'll create it.</div>", unsafe_allow_html=True)
+
+# End of file
